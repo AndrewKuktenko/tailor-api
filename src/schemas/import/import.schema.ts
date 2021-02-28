@@ -19,6 +19,9 @@ export const importSchema = new mongoose.Schema(
     type: {
       type: String,
     },
+    notes: {
+      type: String,
+    },
   },
   { timestamps: true, versionKey: false },
 );

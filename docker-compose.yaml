@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  api-service:
+    build: .
+    command: ${TAILOR_ENV}
+    volumes:
+    - ./src:/usr/src/app/src
+    - ./dist:/usr/src/app/dist
+    ports:
+    - "0.0.0.0:3000:3000"
+    - "0.0.0.0:9229:9229"
+    networks: 
+      - defaults
+  api-service-mongo:
+    image: mongo
+    restart: always
+    ports:
+    - "127.0.0.1:27017:27017"
+    volumes:
+    - data-volume:/data/db
+    networks: 
+      - defaults
+volumes:
+  data-volume:
+networks:
+  defaults:
+    external:
+      name: tailor_bridge

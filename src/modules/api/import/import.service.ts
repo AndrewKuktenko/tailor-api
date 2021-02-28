@@ -4,17 +4,26 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import {Model, Types} from 'mongoose';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as mime from 'mime-types';
 import * as papa from 'papaparse';
 import * as AWS from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import * as config from 'config';
-import papaparse from 'papaparse';
+import * as papaparse from 'papaparse';
+import { IMPORT_STATUS } from 'src/interfaces/import.status';
 import { S3ImportDto } from './dto/s3.import.dto';
 import { CreateImportDto } from './dto/create.import.dto';
 import { EVENT_TYPES } from 'src/interfaces/event.types';
 import { matchImportData } from 'src/utils/matchImportData';
+import { InjectModel } from '@nestjs/mongoose';
+import { ImportModel } from './models/import.model';
+import Hospital from 'src/interfaces/hospital.model';
+import Patient from 'src/interfaces/patient.model';
+import { SOURCE_TYPE } from 'src/interfaces/source.type';
+import { HospitalModel } from './models/hospital.model';
+import { PatientModel } from './models/patient.model';
 
 AWS.config.update({
   region: config.get('aws.region'),
@@ -25,36 +34,42 @@ AWS.config.update({
 const MAX_REQUESTS_FREQUENCY = 5000;
 const MAX_BATCH_SIZE = 250;
 const PATIENT_PROPERTIES = [
-  'PatientId',
-  'MRN',
-  'PatientDOB',
-  'IsPatientDeceased',
-  'DeathDate',
-  'LastName',
-  'FirstName',
-  'Gender',
-  'Sex',
-  'AddressLine',
-  'AddressCity',
-  'AddressState',
-  'AddressZipCode',
+  'patientid',
+  'mrn',
+  'patientdob',
+  'dod_ts',
+  'deceased',
+  'deathdate',
+  'lastname',
+  'firstname',
+  'gender',
+  'sex',
+  'line',
+  'city',
+  'state',
+  'zipcode',
 ];
 
 const HOSPITAL_PROPERTIES = [
-  'TreatmentId',
-  'PatientId',
-  'ProtocolID',
-  'StartDate',
-  'EndDate',
-  'Status',
-  'DisplayName',
-  'AssociatedDiagnoses',
-  'NumberOfCycles',
+  'treatmentline',
+  'treatmentid',
+  'patientid',
+  'protocolid',
+  'startdate',
+  'enddate',
+  'status',
+  'displayname',
+  'diagnose',
+  'cycles',
 ];
 
 @Injectable()
 export class ImportService {
-  constructor() {}
+  constructor(
+    @InjectModel('Import') private readonly importModel: Model<ImportModel>,
+    @InjectModel('Hospital') private readonly hospitalModel: Model<HospitalModel>,
+    @InjectModel('Patient') private readonly patientModel: Model<PatientModel>,
+  ) {}
 
   private readonly s3 = new AWS.S3();
   private readonly logger = new Logger(ImportService.name);
@@ -161,16 +176,32 @@ export class ImportService {
     this.logger.log(`Import started`);
     const key = createImportDto.dataFileUrl.split('/').pop();
     const defaultProperties =
-      createImportDto.source === 'patient'
+      createImportDto.source === SOURCE_TYPE.PATIENT
         ? PATIENT_PROPERTIES
         : HOSPITAL_PROPERTIES;
-    const importErrors = [];
 
     if (!key) {
       this.logger.error('Failed to upload. No file key');
       throw new BadRequestException({
         message: 'Failed to upload',
       });
+    }
+
+    const importEntity = new this.importModel({
+      name: createImportDto.name,
+      dataFileUrl: createImportDto.dataFileUrl,
+      source: createImportDto.source,
+      status: IMPORT_STATUS.IN_PROGRESS,
+      type: createImportDto.type,
+    });
+
+    try {
+      await importEntity.save();
+    } catch (err) {
+      this.logger.error(`Failed to create import: ${err}`);
+      throw new BadRequestException({
+        message: 'Failed to create import',
+      })
     }
 
     const s3DataFileParams = {
@@ -180,8 +211,9 @@ export class ImportService {
 
     const s3Stream = this.s3.getObject(s3DataFileParams).createReadStream();
 
-    s3Stream.on('error', (error) => {
-      // TO-DO: Update import status error
+    s3Stream.on('error', async (error) => {
+      this.logger.error(`Import: data stream error ${error}`);
+      await this.importModel.updateOne({ _id: importEntity._id }, { $set: { status: IMPORT_STATUS.FAILED }, notes: 'Import error' });
     });
 
     const parseStream = papaparse.parse(papaparse.NODE_STREAM_INPUT, {
@@ -203,9 +235,28 @@ export class ImportService {
 
         const matchedData = matchImportData(queue, defaultProperties);
         queue = [];
-
+        
         if (matchedData.length) {
-          // TO-DO upload to MongoDB
+          if (createImportDto.source === SOURCE_TYPE.HOSPITAL) {
+            const hospitals: HospitalModel[] = [];
+            matchedData.forEach((data) => {
+              const entity = new Hospital(data.properties);
+              hospitals.push(new this.hospitalModel(entity));
+            });
+            this.hospitalModel.insertMany(hospitals)
+              .then(() => resolve(true))
+              .catch((err) => reject(err));
+          } else {
+            const patients: PatientModel[] = [];
+            matchedData.forEach((data) => {
+              const entity = new Patient(data.properties);
+              patients.push(new this.patientModel(entity));
+            });
+            this.patientModel.insertMany(patients)
+              .then(() => resolve(true))
+              .catch((err) => reject(err));
+          }
+          clearTimeout(requestRateTimeout);        
         } else {
           return reject();
         }
@@ -233,11 +284,10 @@ export class ImportService {
       }
 
       try {
-        // Update import status 'done'
+        await this.importModel.updateOne({ _id: importEntity._id }, { $set: { status: IMPORT_STATUS.DONE }});
       } catch (err) {
         this.logger.error(`Import update import status. ${err}`);
       }
-      this.logger.log(`Import done`);
     });
   }
 }

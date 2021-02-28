@@ -1,0 +1,103 @@
+{
+    "extends": "tslint-config-airbnb",
+    "experimentalDecorators": true,
+    "settings": {
+      "import/resolver": {
+        "node": {
+          "paths": ["src"]
+        }
+      }
+    },
+    "rules": {
+      "max-line-length": [
+        true,
+        {
+          "limit": 250,
+          "ignore-pattern": "^import |^export {(.*?)}"
+        }
+      ],
+      "no-increment-decrement": false,
+      "variable-name": [
+        true,
+        "ban-keywords",
+        "check-format",
+        "allow-leading-underscore"
+      ],
+      "naming-convention": [
+        true,
+        {
+          "type": "default",
+          "format": "camelCase",
+          "leadingUnderscore": "allow",
+          "trailingUnderscore": "forbid"
+        },
+        {
+          "type": "variable",
+          "leadingUnderscore": "allow",
+          "snakeCase": "allow",
+          "extends": "default",
+          "format": [
+            "camelCase",
+            "UPPER_CASE"
+          ]
+        },
+        {
+          "type": "variable",
+          "modifiers": [
+            "global",
+            "const"
+          ],
+          "format": [
+            "PascalCase",
+            "camelCase",
+            "UPPER_CASE"
+          ]
+        },
+        {
+          "type": "function",
+          "extends": "variable",
+          "leadingUnderscore": "allow",
+          "modifiers": [
+            "export",
+            "const"
+          ],
+          "format": [
+            "camelCase",
+            "PascalCase"
+          ]
+        },
+        {
+          "type": "functionVariable",
+          "extends": "variable",
+          "leadingUnderscore": "allow",
+          "modifiers": [
+            "export",
+            "const"
+          ],
+          "format": [
+            "camelCase",
+            "PascalCase"
+          ]
+        },
+        {
+          "type": "member",
+          "modifiers": "private",
+          "leadingUnderscore": "allow"
+        },
+        {
+          "type": "type",
+          "format": "PascalCase"
+        },
+        {
+          "type": "enumMember",
+          "format": [
+            "UPPER_CASE",
+            "PascalCase"
+          ]
+        }
+      ],
+      "curly": true,
+      "ter-arrow-parens": false
+    }
+  }
+  
