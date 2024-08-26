@@ -4,8 +4,8 @@
     "ssl": false
   },
   "aws": {
-    "accessKeyId": "AKIAJYGMNDKX5KNJNW6Q",
-    "secretKey": "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",
+    "accessKeyId": "",
+    "secretKey": "",
     "region": "us-east-2",
     "bucket": {
       "import": {
